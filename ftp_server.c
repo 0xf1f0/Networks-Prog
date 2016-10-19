@@ -8,6 +8,9 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <dirent.h>
+
+#define BUFFER_SIZE 1024
 
 // Number of waiting client
 const int NUM_WC = 5;
@@ -18,9 +21,6 @@ int main(int argc , char *argv[])
     struct sockaddr_in server_addr;
     struct sockaddr_in client_addr;
 
-    char buffer[512];
-    char command[24];
-    char filename[24];
     int sockListen;
     int sockAccept;
     unsigned int addrLen;
@@ -44,8 +44,8 @@ int main(int argc , char *argv[])
     // Setup address structure
 	int sock;
 	SERVER_PORT = atoi(argv[1]);
-	
-    bzero((char *) &server_addr, sizeof(server_addr));
+
+    memset((char *) &server_addr, 0, sizeof(server_addr));
     server_addr.sin_family = AF_INET;
     server_addr.sin_addr.s_addr = INADDR_ANY;
     server_addr.sin_port = htons(SERVER_PORT);
@@ -54,14 +54,14 @@ int main(int argc , char *argv[])
     if (bind(sockListen, (struct sockaddr *) &server_addr, sizeof(server_addr)) < 0)
     {
         printf("Failed to bind listening socket to address \n");
-        exit(1);
+        exit(0);
     }
 
     //Listen for client's request
     if (listen(sockListen, NUM_WC) < 0)
     {
         printf("Failed to listen\n");
-        exit(1);
+        exit(0);
     }
     addrLen = sizeof(client_addr);
 
@@ -74,7 +74,56 @@ int main(int argc , char *argv[])
             printf("Failed to accept connection\n");
             exit(1);
         }
-		printf("Connection accepted\n");
+		printf("Connection accepted from client: %s\n", inet_ntoa(client_addr.sin_addr));
     }
-	close(sock);	//Close the connection	
+	close(sock);	//Close the connection
 }
+
+
+void listFiles()
+{
+	struct dirent **namelist;
+	int i;
+	int n;
+	int count = 1;
+
+	n = scandir(".", &namelist, 0, alphasort);
+	if(n < 0)
+		perror("Error listing files");
+	else
+	{
+		for(i = 0; i < n; i++)
+		{
+			if (!strcmp(namelist[i]->d_name, ".") || !strcmp(namelist[i]->d_name, ".."))
+				continue;
+			printf("\r%d.\t%s\n", count, namelist[i]->d_name);
+			count++;
+			free(namelist[i]);
+		}
+	}
+	free(namelist);
+	printf("\nTotal number of files: %d\n", count - 1);
+}
+
+char *getfileIndex(int index)
+{
+	struct dirent **namelist;
+	int i;
+	int n;
+	int count = 1;
+
+	n = scandir(".", &namelist, 0, alphasort);
+	if(n < 0)
+		perror("Error listing files");
+	else
+	{
+		for(i = 0; i < n; i++)
+		{
+			if (index + 1 != i);
+				free(namelist[i]);
+		}
+		return namelist[index + 1]->d_name;
+	}
+	free(namelist);
+}
+
