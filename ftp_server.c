@@ -64,9 +64,11 @@ int main(int argc , char *argv[])
         exit(0);
     }
     addrLen = sizeof(client_addr);
+    printf("Server: waiting for connections...\n");
 
     while(1)
     {
+
         //Establish a connection from client
         sockAccept = accept(sockListen,(struct sockaddr *) &client_addr, &addrLen);
         if (sockAccept < 0)
@@ -74,9 +76,42 @@ int main(int argc , char *argv[])
             printf("Failed to accept connection\n");
             exit(1);
         }
-		printf("Connection accepted from client: %s\n", inet_ntoa(client_addr.sin_addr));
+        printf("Connection accepted from client: %s\n", inet_ntoa(client_addr.sin_addr));
+
+            //Receive the filename from client
+        while(sockAccept > 0)
+        {
+            int byteReceived;
+            char buffer[BUFFER_SIZE];
+
+            byteReceived = recv(sockAccept, buffer, sizeof(buffer) - 1, 0);
+            if (byteReceived == -1)
+            {
+                fprintf(stderr, "Failed to receive client request\n");
+                exit(1);
+            }
+            else if(byteReceived == 0)
+            {
+                printf("Connection closed by client: %s\n",inet_ntoa(client_addr.sin_addr));
+                break;
+            }
+            else
+            {
+                buffer[byteReceived] = '\0';
+                printf("Server: Msg Received %s\n", buffer);
+
+                if ((send(sockAccept, buffer, strlen(buffer), 0))== -1)
+                {
+                    fprintf(stderr, "Failure sending message\n");
+                    close(sockAccept);
+                    break;
+                }
+            }
+            printf("Server: Msg being sent: %s\nNumber of bytes sent: %d\n", buffer, strlen(buffer));
+        }
     }
-	close(sock);	//Close the connection
+    //End of Inner While...
+    close(sock);	//Close the connection
 }
 
 
@@ -103,6 +138,7 @@ void listFiles()
 	}
 	free(namelist);
 	printf("\nTotal number of files: %d\n", count - 1);
+	printf("\nEnter \"d filenumber\" to download a file\n");
 }
 
 char *getfileIndex(int index)

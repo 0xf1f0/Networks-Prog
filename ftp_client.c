@@ -32,7 +32,7 @@ char *getfileIndex(int);
 
 int main(int argc, char *argv[])
 {
-    char SERVER_IP[MAX_LEN];    //xxx.xxx.xxx.xxx max of 15 characters
+    char SERVER_IP[BUFFER_SIZE];
     int sock;
     int outfile;     //file descriptor of the file to upload
     int infile;     //file descriptor of the file to upload
@@ -77,7 +77,7 @@ int main(int argc, char *argv[])
 	retcode = connect(sock, (struct sockaddr *)&server_addr, sizeof(server_addr));
 	if(retcode < 0) //There is an error
 	{
-		printf("Failed to connect to the server: \'%s on port: %d'\n",SERVER_IP, SERVER_PORT);
+		printf("Failed to connect to the server: %s on port: %d\n", SERVER_IP, SERVER_PORT);
 		exit(1);
 	}
 
@@ -90,24 +90,68 @@ int main(int argc, char *argv[])
         char input[BUFFER_SIZE];
         char *token1;   //command
         char *token2;   //argument
-        char *ptr;
-        char cmd[BUFFER_SIZE];
-        char arg[BUFFER_SIZE];
         char fileName[BUFFER_SIZE];
+        char *fileptr;
+        char msg2client[BUFFER_SIZE];
         long int fileNum;
         int upcode;
 
 
 
         printf("ftp> ");    //Keep command line interface in a continuous loop
-        fgets(input, BUFFER_SIZE, stdin );
+        //fgets(input, BUFFER_SIZE, stdin );
+        scanf("%s", input);
 
         /*Process the user input and parse it into tokens */
-        token1 = strtok(input, DELIMITER);
-        token2 = strtok(NULL, DELIMITER);
-        fileNum = strtol (token2, &ptr, 10);        //strip the file number from token2
+        //token1 = strtok(input, DELIMITER);
+        //token2 = strtok(NULL, DELIMITER);
+        fileNum = strtol (input, &fileptr, 10);        //strip the file number from token2
         strcpy(fileName, getfileIndex(fileNum));    //make a copy of the filename using its file number
 
+            /* List Current files on client */
+
+
+            /* **************************** */
+
+
+            /* List Current files on client */
+
+
+
+            /* **************************** */
+
+
+            /* List current file on server's  */
+            //Send the filename to the server
+
+            if ((send(sock, fileName, strlen(fileName), 0))== -1)
+            {
+                fprintf(stderr, "File request failed\n");
+                close(sock);
+                exit(1);
+            }
+            else
+            {
+                printf("Sending file: \'%s\'\n", fileName);
+                retcode = recv(sock, msg2client, sizeof(msg2client), 0);
+                if (retcode <= 0 )
+                {
+                    printf("Connection error, try again\n");
+                    //Break from the while loop
+                    break;
+                }
+                msg2client[retcode] = '\0';
+                printf("Client: Message received from server: '\%s\'\n", msg2client);
+            }
+
+
+
+        /* **************************** */
+
+
+
+        /* Upload a file to the server */
+        /*
         FILE *fp = fopen(fileName, "rb");           //read the file into binary format
         if(fp == NULL)
         {
@@ -115,10 +159,31 @@ int main(int argc, char *argv[])
             exit(EXIT_FAILURE);
         }
 
-        while((retcode = fread(sendbuffer, 1, sizeof(sendbuffer), fp))>0 )
+        /* Receive data in chunks of BUFFER_SIZE bytes
+        int rcvdBtyes = 0;
+        while(retcode = fread(BUFFER_SIZE, 1, sizeof(BUFFER_SIZE), fp)> 0 )
         {
             send(sfd, sendbuffer, b, 0);
         }
+        */
+
+        /* **************************** */
+
+
+
+        /* Upload a file to the server */
+
+
+
+        /* **************************** */
+
+
+        /* Exit the connection */
+
+
+
+        /* **************************** */
+
 
 
         /*
@@ -133,8 +198,6 @@ int main(int argc, char *argv[])
         printf("Command: %s\n", cmd);
         printf("Argument: %s\n", arg);
         */
-
-
     }
     close(sock);	//Close the connection
     return 0;
@@ -172,6 +235,7 @@ void listFiles()
 	}
 	free(namelist);
 	printf("\nTotal number of files: %d\n", count - 1);
+	printf("\nEnter \"u filenumber\" to upload a file\n");
 }
 
 char *getfileIndex(int index)
