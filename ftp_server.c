@@ -100,7 +100,7 @@ int main(int argc , char *argv[])
                 buffer[byteReceived] = '\0';
                 printf("Server: Msg Received %s\n", buffer);
 
-                if ((send(sockAccept, buffer, strlen(buffer), 0))== -1)
+                if((send(sockAccept, buffer, strlen(buffer), 0))== -1)
                 {
                     fprintf(stderr, "Failure sending message\n");
                     close(sockAccept);

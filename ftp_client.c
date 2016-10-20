@@ -1,5 +1,3 @@
-/* client-side program that uploads and download files from a server *	using ftp */
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -25,8 +23,9 @@
 #define FILE_DOWNLOAD 2
 #define CLIENT_EXIT 1
 #define USAGE "Usage: command argument\n"
+
 //Function prototypes
-void optionMenu(void);
+void direction(void);
 void listFiles(void);
 char *getfileIndex(int);
 
@@ -80,50 +79,105 @@ int main(int argc, char *argv[])
 		printf("Failed to connect to the server: %s on port: %d\n", SERVER_IP, SERVER_PORT);
 		exit(1);
 	}
-
 	/*No error were generated
+	**Print the direction/how-to-use to the user
 	**About time we do something now that we have successfully establish a connection with the server
 	**Get ftp command + argument from keyboard
 	*/
+	direction();
     while(1)    //Keep command line interface in a continuous loop
     {
         char input[BUFFER_SIZE];
         char *token1;   //command
         char *token2;   //argument
         char fileName[BUFFER_SIZE];
-        char *fileptr;
+        char *strptr;
         char msg2client[BUFFER_SIZE];
         long int fileNum;
-        int upcode;
 
-
-
-        printf("ftp> ");    //Keep command line interface in a continuous loop
-        //fgets(input, BUFFER_SIZE, stdin );
-        scanf("%s", input);
+        printf("ftp> ");    //Keep command line interface in a loop
+        fgets(input, BUFFER_SIZE, stdin );
 
         /*Process the user input and parse it into tokens */
-        //token1 = strtok(input, DELIMITER);
-        //token2 = strtok(NULL, DELIMITER);
-        fileNum = strtol (input, &fileptr, 10);        //strip the file number from token2
+        token1 = strtok(input, DELIMITER);
+        token2 = strtok(NULL, DELIMITER);
+
+        fileNum = strtol (input, &strptr, 10);      //strip the file number from token2
         strcpy(fileName, getfileIndex(fileNum));    //make a copy of the filename using its file number
 
-            /* List Current files on client */
+        /* No input from user */
 
+        if(token1 == NULL)
+        {
+            continue;
+        }
+        /* **************************** */
 
-            /* **************************** */
+        /* List Current files on client */
+        else if(strcmp(token1, "ls") == 0 && strcmp(token2, "client") == 0)
+        {
+            listFiles(); //List the files in the current directory
+        }
+        /* **************************** */
 
+        /* List Current files on server */
+        else if(strcmp(token1, "ls") == 0 && strcmp(token2, "server") == 0)
+        {
+            printf("ls server\n");
+        }
+        /* **************************** */
 
-            /* List Current files on client */
+        /* Upload a file to the server */
+        else if((strcmp(token1, "u")== 0))
+        {
+            while(1)
+            {
+                /*Convert token2 to a number and convert to an integer */
+                fileNum = strtol (token2, &strptr, 10);      //strip the file number from token2 and store in base10
+                if(!isdigit(fileNum))
+                {
+                    printf("Invalid file number\n");
+                    break;
+                }
+                //Send file to server
+            }
+        }
+        /* **************************** */
 
+        /* Download a file from the server */
+        else if((strcmp(token1, "d")== 0))
+        {
+            while(1)
+            {
+                /*Convert token2 to a number and convert to an integer */
+                fileNum = strtol (token2, &strptr, 10);      //strip the file number from token2 and store in base10
+                if(!isdigit(fileNum))
+                {
+                    printf("Invalid file number\n");
+                    break;
+                }
+                //Request file from server
+            }
+        }
+        /* **************************** */
 
+        /* Exit the connection */
+        else if((strcmp(token1, "bye") == 0) || strcmp(token1, "exit") == 0)
+        {
+            close(sock);
+            exit(EXIT_SUCCESS);
+        }
+        /* **************************** */
 
-            /* **************************** */
+        /* Unknown commands */
+        else
+        {
+            fprintf(stderr, USAGE);
+        }
 
-
-            /* List current file on server's  */
-            //Send the filename to the server
-
+        ////////////////////////////////////////////////////////
+        //Send and receive a string from server
+        /*
             if ((send(sock, fileName, strlen(fileName), 0))== -1)
             {
                 fprintf(stderr, "File request failed\n");
@@ -144,7 +198,7 @@ int main(int argc, char *argv[])
                 printf("Client: Message received from server: '\%s\'\n", msg2client);
             }
 
-
+        */
 
         /* **************************** */
 
@@ -166,51 +220,28 @@ int main(int argc, char *argv[])
             send(sfd, sendbuffer, b, 0);
         }
         */
-
-        /* **************************** */
-
-
-
-        /* Upload a file to the server */
-
-
-
-        /* **************************** */
-
-
-        /* Exit the connection */
-
-
-
-        /* **************************** */
-
-
-
-        /*
-        printf("Token1: %s\n", token1);
-        printf("Token2: %s\n", token2);
-        */
-        //copy the tokens into a char aray
-        /*
-        strncpy(cmd, token1, sizeof(cmd)-1);
-        strncpy(arg, token2, sizeof(arg)-1);
-
-        printf("Command: %s\n", cmd);
-        printf("Argument: %s\n", arg);
-        */
     }
     close(sock);	//Close the connection
     return 0;
-
 }
 
 /*Function to display menu and usage to a user*/
-void optionMenu()
+void direction()
 {
+    printf("\n");
     printf("\t*****************************************************\n");
+    printf("\t*          Simple FTP Server Implementation         *\n");
     printf("\t*                                                   *\n");
+    printf("\t* AVAILABLE COMMANDS:                               *\n");
+    printf("\t*                                                   *\n");
+    printf("\t* (1)ls client: list files on the client            *\n");
+    printf("\t* (2)ls server: list files on the server            *\n");
+    printf("\t* (3)u filenumber: upload filenumber to server      *\n");
+    printf("\t* (4)d filenumber: download filenumber from server  *\n");
+    printf("\t* (5)bye/exit: Close the connection                 *\n");
     printf("\t*****************************************************\n");
 }
+
 
 void listFiles()
 {
