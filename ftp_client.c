@@ -8,11 +8,13 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <fcntl.h>
 #include <dirent.h>
 #include <stdbool.h>
 
-#define BUFFER_SIZE 1024
-#define MAX_LEN 128
+
+#define BUFFER_SIZE 20480
+#define MAX_LEN 256
 #define DELIMITER " \t\r\n\v\f"
 
 /*Pre-defined opcodes*/
@@ -95,7 +97,10 @@ int main(int argc, char *argv[])
         char *strptr;
         char fileBuffer[BUFFER_SIZE];
         long int fileNum;
-        int bytes = 0;
+        ssize_t byteRcv = 0;    //byte read from local directory
+        ssize_t byteSent = 0;   //byte sent to the socket
+        ssize_t byteRead = 0;    //byte Read from the socket
+        ssize_t fileSz = 0;     //Actual file size in byte
 
         printf("ftp> ");    //Keep command line interface in a loop
         fgets(input, BUFFER_SIZE, stdin );
@@ -135,7 +140,7 @@ int main(int argc, char *argv[])
             strcpy(fileName, getfileIndex(fileNum));
             //Append the filename to token1 separated by a space ' '
             char *msg2server;
-            char *msgAck;
+            char serverAck[MAX_LEN];
             //memset(msg2server, '\0', sizeof(msg2server));   //clear the memory location
             msg2server = malloc(strlen(token1) + strlen(" ") + strlen(fileName) + 1); //+1 for the zero-terminator
             strcpy(msg2server, token1);
@@ -152,36 +157,55 @@ int main(int argc, char *argv[])
             }
             else
             {
-                while(1)
+                printf("Waiting for acknowledgment from ftp server ...\n");
+                retcode = recv(sock, serverAck, sizeof(serverAck), 0);
+                if (retcode <= 0 )
+                {
+                    printf("Connection error, try again\n");
+                    //Break from the while loop
+                    break;
+                }
+                serverAck[retcode] = '\0';
+                printf("Server Ack: '\%s\'\n", serverAck);
+                /* Wait for message acknowledgment from server then send the files*/
+                if(retcode > 0)
                 {
                     //Check if the file exist before sending
                     //Send file to server
                     printf("Searching for file \"%s\" ...\n", fileName);
-                    FILE *outFile = fopen(fileName, "r");
+                    int outFile = open(fileName, O_RDONLY);   //file descriptor
+                    int sentCount;
                     bool fileFound;
-                    if(outFile == NULL)
+
+                    if(outFile < 0)
                     {
-                        printf("File not found or Invalid file number\n");
                         fileFound = 1;
-                        break;
+                        printf("File not found or Invalid file number\n");
                     }
                     else
                     {
+                        /*
+                        ssize_t byteRcv = 0;    //byte read from local directory
+                        ssize_t byteSent = 0    //byte sent to the socket
+                        ssize_t byteRead = 0    //byte Read from the socket
+                        ssize_t fileSz = 0;     //Actual file size in byte
+                        */
                         fileFound = 0;
-                        while((bytes = fread(fileBuffer, strlen(fileBuffer) + 1, 1, outFile)) > 0)
+                        printf("File \"%s\" found\n", fileName);
+                        /* Read file in chunks of MAX_LEN =256 */
+                        while((byteRead = read(outFile, fileBuffer, MAX_LEN)) > 0)
                         {
-                            if(send(sock, fileBuffer, bytes, 0) < 0)
+
+                            if(byteSent = send(sock, fileBuffer, byteRead, 0) < 0)
                             {
                                 fprintf(stderr, "ERROR: Failed to send file %s\n", fileName);
-                                break;
                             }
+                            fileSz += byteRead;
                         }
-                        printf("File \"%s\" sent to ftp server successfully, %d bytes sent\n", fileName, ftello(outFile));
-                        fclose(outFile);
-                        break;
+                        close(outFile);
                     }
+                    printf("File \"%s\" uploaded successfully, %d bytes sent\n", fileName, fileSz);
                 }
-
             }
         }
         /* **************************** */

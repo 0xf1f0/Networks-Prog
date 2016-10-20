@@ -8,9 +8,11 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <fcntl.h>
 #include <dirent.h>
 
 #define BUFFER_SIZE 20480   //20K
+#define MAX_LEN 256
 #define DELIMITER " \t\r\n\v\f"
 #define UPLOAD_FAIL "Server: Upload failed"
 #define WRITE_FAIL "Server: Write failed"
@@ -28,6 +30,10 @@ int main(int argc , char *argv[])
     int sockAccept;
     unsigned int addrLen;
     unsigned int SERVER_PORT;
+    ssize_t byteRcv = 0;    //byte read from local directory
+    ssize_t byteSent = 0;   //byte sent to the socket
+    ssize_t byteRead = 0;    //byte Read from the socket
+    ssize_t fileSz = 0;     //Actual file size in byte
 
     // Check if correct arguments were passed
 	if(argc != 2 || !(isdigit(*argv[1])))
@@ -65,11 +71,11 @@ int main(int argc , char *argv[])
         printf("Failed to listen\n");
         exit(0);
     }
-    printf("%s", SERVER_WAITING);
     addrLen = sizeof(client_addr);
 
     while(1)
     {
+        printf("%s\n", SERVER_WAITING);
         //Establish a connection from client
         sockAccept = accept(sockListen,(struct sockaddr *) &client_addr, &addrLen);
         if (sockAccept < 0)
@@ -80,13 +86,11 @@ int main(int argc , char *argv[])
         printf("Connection accepted from client: %s\n", inet_ntoa(client_addr.sin_addr));
 
         //Receive the command from client
-        while(sockAccept > 0)
+        if(sockAccept > 0)
         {
             int msg4rmclient;
             char msgBuffer[BUFFER_SIZE];
             char fileBuffer[BUFFER_SIZE];
-            int writeSz = 0;
-            int clientSz = 0;
 
             msg4rmclient = recv(sockAccept, msgBuffer, sizeof(msgBuffer) - 1, 0);
             if (msg4rmclient == -1)
@@ -99,69 +103,73 @@ int main(int argc , char *argv[])
                 printf("Connection closed by client: %s\n",inet_ntoa(client_addr.sin_addr));
                 break;
             }
-            /*Request from client was received successfully*/
+
             else
             {
-                /*Process client request and parse it into tokens */
-                //get the command and filename from client
+                /*Request from client was received successfully*/
                 msgBuffer[msg4rmclient] = '\0';
-                printf("Server: Command received from client [%s]\n", msgBuffer);
-
-                char *cmd;          //command
-                char *fileName;     //filename
-                int fileBytes = 0;
-
-                cmd = strtok(msgBuffer, DELIMITER);
-                fileName = strtok(NULL, DELIMITER);
-
-                printf("command: %s\nfilename: %s\n", cmd, fileName);
-
-                while(1) //Command from client was received successfully
+                printf("Server: Request received from client [%s]\n", msgBuffer);
+                if ((send(sockAccept, msgBuffer, strlen(msgBuffer), 0))== -1)
                 {
-                    if(strcmp(cmd, "u")) //Client want to upload a file
-                    {
-                        FILE *inFile = fopen(fileName, "ab");
-                        if(inFile == NULL)
-                        {
-                            printf("Server: \"%s\" cannot be opened\n", fileName);
-                            send(sockAccept, UPLOAD_FAIL, strlen(UPLOAD_FAIL), 0);
-                            break;
-                        }
-                        else
-                        {
-                            while((fileBytes = recv(sockAccept, fileBuffer, BUFFER_SIZE, 0)) > 0)
-                            {
-                               writeSz = fwrite(fileBuffer, sizeof(char), clientSz, inFile);
-                               if(writeSz < clientSz)
-                               {
-                                    printf("Server: \"%s\" cannot be opened\n", fileName);
-                                    send(sockAccept, WRITE_FAIL, strlen(WRITE_FAIL), 0);
-                                    break;
-                               }
-                               if(clientSz == 0  || clientSz != BUFFER_SIZE)
-                                    break;
-                            }
-                        }
-                    }
-                    else
-                    {
-                        printf("Unknown command from client\n");
-                        break;
-                    }
-
-                }
-                if((send(sockAccept, msgBuffer, strlen(msgBuffer), 0)) == -1)
-                {
-                    fprintf(stderr, "Failure sending message\n");
+                    fprintf(stderr, "Failure sending acknowledgment\n");
                     close(sockAccept);
                     break;
                 }
-                printf("Server acknowledged request %s\nNumber of bytes sent: %d\n", msgBuffer, strlen(msgBuffer));
             }
+            /*Send an acknowledgment back to the client*/
+            /*Process client request and parse it into tokens */
+            //get the command and filename from client
+            printf("Server: Acknowledgment sent [%s]\nNumber of bytes sent: %d\n", msgBuffer, strlen(msgBuffer));
+            if(msg4rmclient > 0)
+            {
+                char *cmd;          //command
+                char *fileName;     //filename
+                int inFile; //file descriptor
+                //char request[MAX_LEN]; //[command filename]
+                //Make a copy of the request in order to compare
+                //strcpy(request, msgBuffer);
 
-        }
+                cmd = strtok(msgBuffer, DELIMITER);
+                fileName = strtok(NULL, DELIMITER);
+                //printf("Original request from client: %s\n", request);
+                printf("command: %s\nfilename: %s\n", cmd, fileName);
+                if(strcmp(cmd, "u") == 0) //Client want to upload a file
+                {
+                    /* Attempt to save received file on local directory using mode 0644 /rw-r--r--*/
+                    inFile = open(fileName, O_WRONLY|O_CREAT, 0664);
+                    if(inFile < 0)
+                    {
+                        printf("Error creating file \"%s\"\n", fileName);
+                    }
+                    else
+                    {
+                        /*
+                        ssize_t byteRcv = 0;    //byte read from local directory
+                        ssize_t byteSent = 0    //byte sent to the socket
+                        ssize_t byteRead = 0    //byte Read from the socket
+                        ssize_t fileSz = 0;     //Actual file size in byte
+                        */
+                        while((byteRcv = recv(sockAccept, fileBuffer, BUFFER_SIZE, 0)) > 0)
+                        {
+                            fileSz += byteRcv;
+                            if(write(inFile, fileBuffer, byteRcv) < 0)
+                            {
+                                printf("Error writing \"%s\"\n", fileName);
+                            }
+                        }
+                        close(inFile); //close the file
+                    }
+                    printf("File \"%s\" saved, %d bytes received\n", fileName, fileSz);
+                }
+                else
+                {
+                    printf("Unknown command from client\n");
+                    break;
+                }
+            }
+        }//close (sockAccept > 0)
     }
-    //End of Inner While...
+    //End of Inner While(1)...
     close(sockListen);	//Close the connection
 }
 

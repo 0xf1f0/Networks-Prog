@@ -45,7 +45,6 @@ void listFiles()
 	int i;
 	int n;
 	int count = 1;
-
 	n = scandir(".", &namelist, 0, alphasort);
 	if(n < 0)
 		perror("Error listing files");
