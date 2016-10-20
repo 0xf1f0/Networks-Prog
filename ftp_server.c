@@ -10,7 +10,11 @@
 #include <arpa/inet.h>
 #include <dirent.h>
 
-#define BUFFER_SIZE 1024
+#define BUFFER_SIZE 20480   //20K
+#define DELIMITER " \t\r\n\v\f"
+#define UPLOAD_FAIL "Server: Upload failed"
+#define WRITE_FAIL "Server: Write failed"
+#define SERVER_WAITING "Server: waiting for connections"
 
 // Number of waiting client
 const int NUM_WC = 5;
@@ -20,7 +24,6 @@ int main(int argc , char *argv[])
 
     struct sockaddr_in server_addr;
     struct sockaddr_in client_addr;
-
     int sockListen;
     int sockAccept;
     unsigned int addrLen;
@@ -42,7 +45,6 @@ int main(int argc , char *argv[])
     }
 
     // Setup address structure
-	int sock;
 	SERVER_PORT = atoi(argv[1]);
 
     memset((char *) &server_addr, 0, sizeof(server_addr));
@@ -63,12 +65,11 @@ int main(int argc , char *argv[])
         printf("Failed to listen\n");
         exit(0);
     }
+    printf("%s", SERVER_WAITING);
     addrLen = sizeof(client_addr);
-    printf("Server: waiting for connections...\n");
 
     while(1)
     {
-
         //Establish a connection from client
         sockAccept = accept(sockListen,(struct sockaddr *) &client_addr, &addrLen);
         if (sockAccept < 0)
@@ -78,40 +79,90 @@ int main(int argc , char *argv[])
         }
         printf("Connection accepted from client: %s\n", inet_ntoa(client_addr.sin_addr));
 
-            //Receive the filename from client
+        //Receive the command from client
         while(sockAccept > 0)
         {
-            int byteReceived;
-            char buffer[BUFFER_SIZE];
+            int msg4rmclient;
+            char msgBuffer[BUFFER_SIZE];
+            char fileBuffer[BUFFER_SIZE];
+            int writeSz = 0;
+            int clientSz = 0;
 
-            byteReceived = recv(sockAccept, buffer, sizeof(buffer) - 1, 0);
-            if (byteReceived == -1)
+            msg4rmclient = recv(sockAccept, msgBuffer, sizeof(msgBuffer) - 1, 0);
+            if (msg4rmclient == -1)
             {
-                fprintf(stderr, "Failed to receive client request\n");
+                fprintf(stderr, "Failed to receive client's request\n");
                 exit(1);
             }
-            else if(byteReceived == 0)
+            else if(msg4rmclient == 0)
             {
                 printf("Connection closed by client: %s\n",inet_ntoa(client_addr.sin_addr));
                 break;
             }
+            /*Request from client was received successfully*/
             else
             {
-                buffer[byteReceived] = '\0';
-                printf("Server: Msg Received %s\n", buffer);
+                /*Process client request and parse it into tokens */
+                //get the command and filename from client
+                msgBuffer[msg4rmclient] = '\0';
+                printf("Server: Command received from client [%s]\n", msgBuffer);
 
-                if((send(sockAccept, buffer, strlen(buffer), 0))== -1)
+                char *cmd;          //command
+                char *fileName;     //filename
+                int fileBytes = 0;
+
+                cmd = strtok(msgBuffer, DELIMITER);
+                fileName = strtok(NULL, DELIMITER);
+
+                printf("command: %s\nfilename: %s\n", cmd, fileName);
+
+                while(1) //Command from client was received successfully
+                {
+                    if(strcmp(cmd, "u")) //Client want to upload a file
+                    {
+                        FILE *inFile = fopen(fileName, "ab");
+                        if(inFile == NULL)
+                        {
+                            printf("Server: \"%s\" cannot be opened\n", fileName);
+                            send(sockAccept, UPLOAD_FAIL, strlen(UPLOAD_FAIL), 0);
+                            break;
+                        }
+                        else
+                        {
+                            while((fileBytes = recv(sockAccept, fileBuffer, BUFFER_SIZE, 0)) > 0)
+                            {
+                               writeSz = fwrite(fileBuffer, sizeof(char), clientSz, inFile);
+                               if(writeSz < clientSz)
+                               {
+                                    printf("Server: \"%s\" cannot be opened\n", fileName);
+                                    send(sockAccept, WRITE_FAIL, strlen(WRITE_FAIL), 0);
+                                    break;
+                               }
+                               if(clientSz == 0  || clientSz != BUFFER_SIZE)
+                                    break;
+                            }
+                        }
+                    }
+                    else
+                    {
+                        printf("Unknown command from client\n");
+                        break;
+                    }
+
+                }
+                if((send(sockAccept, msgBuffer, strlen(msgBuffer), 0)) == -1)
                 {
                     fprintf(stderr, "Failure sending message\n");
                     close(sockAccept);
                     break;
                 }
+                printf("Server acknowledged request %s\nNumber of bytes sent: %d\n", msgBuffer, strlen(msgBuffer));
             }
-            printf("Server: Msg being sent: %s\nNumber of bytes sent: %d\n", buffer, strlen(buffer));
+
         }
     }
     //End of Inner While...
-    close(sock);	//Close the connection
+    close(sockListen);	//Close the connection
 }
 
 

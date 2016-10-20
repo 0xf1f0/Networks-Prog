@@ -9,9 +9,10 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <dirent.h>
-
+#include <stdbool.h>
 
 #define BUFFER_SIZE 1024
+#define MAX_LEN 128
 #define DELIMITER " \t\r\n\v\f"
 
 /*Pre-defined opcodes*/
@@ -92,8 +93,9 @@ int main(int argc, char *argv[])
         char *token2;   //argument
         char fileName[BUFFER_SIZE];
         char *strptr;
-        char msg2client[BUFFER_SIZE];
+        char fileBuffer[BUFFER_SIZE];
         long int fileNum;
+        int bytes = 0;
 
         printf("ftp> ");    //Keep command line interface in a loop
         fgets(input, BUFFER_SIZE, stdin );
@@ -101,9 +103,6 @@ int main(int argc, char *argv[])
         /*Process the user input and parse it into tokens */
         token1 = strtok(input, DELIMITER);
         token2 = strtok(NULL, DELIMITER);
-
-        fileNum = strtol (input, &strptr, 10);      //strip the file number from token2
-        strcpy(fileName, getfileIndex(fileNum));    //make a copy of the filename using its file number
 
         /* No input from user */
 
@@ -130,16 +129,59 @@ int main(int argc, char *argv[])
         /* Upload a file to the server */
         else if((strcmp(token1, "u")== 0))
         {
-            while(1)
+            /*Send the command and filename to server and wait for an acknowledgment*/
+            /*Convert token2 to a number and convert to an integer */
+            fileNum = strtol (token2, &strptr, 10);      //strip the file number from token2 and store in base10
+            strcpy(fileName, getfileIndex(fileNum));
+            //Append the filename to token1 separated by a space ' '
+            char *msg2server;
+            char *msgAck;
+            //memset(msg2server, '\0', sizeof(msg2server));   //clear the memory location
+            msg2server = malloc(strlen(token1) + strlen(" ") + strlen(fileName) + 1); //+1 for the zero-terminator
+            strcpy(msg2server, token1);
+            strcat(msg2server, " ");
+            strcat(msg2server, fileName);
+
+            printf("This is the msg2server: %s\n", msg2server);
+            //msg2server: okay
+            if ((send(sock, msg2server, strlen(msg2server), 0)) == -1)
             {
-                /*Convert token2 to a number and convert to an integer */
-                fileNum = strtol (token2, &strptr, 10);      //strip the file number from token2 and store in base10
-                if(!isdigit(fileNum))
+                fprintf(stderr, "File request failed\n");
+                break;
+                //Do something else or try again
+            }
+            else
+            {
+                while(1)
                 {
-                    printf("Invalid file number\n");
-                    break;
+                    //Check if the file exist before sending
+                    //Send file to server
+                    printf("Searching for file \"%s\" ...\n", fileName);
+                    FILE *outFile = fopen(fileName, "r");
+                    bool fileFound;
+                    if(outFile == NULL)
+                    {
+                        printf("File not found or Invalid file number\n");
+                        fileFound = 1;
+                        break;
+                    }
+                    else
+                    {
+                        fileFound = 0;
+                        while((bytes = fread(fileBuffer, strlen(fileBuffer) + 1, 1, outFile)) > 0)
+                        {
+                            if(send(sock, fileBuffer, bytes, 0) < 0)
+                            {
+                                fprintf(stderr, "ERROR: Failed to send file %s\n", fileName);
+                                break;
+                            }
+                        }
+                        printf("File \"%s\" sent to ftp server successfully, %d bytes sent\n", fileName, ftello(outFile));
+                        fclose(outFile);
+                        break;
+                    }
                 }
-                //Send file to server
+
             }
         }
         /* **************************** */
@@ -175,51 +217,6 @@ int main(int argc, char *argv[])
             fprintf(stderr, USAGE);
         }
 
-        ////////////////////////////////////////////////////////
-        //Send and receive a string from server
-        /*
-            if ((send(sock, fileName, strlen(fileName), 0))== -1)
-            {
-                fprintf(stderr, "File request failed\n");
-                close(sock);
-                exit(1);
-            }
-            else
-            {
-                printf("Sending file: \'%s\'\n", fileName);
-                retcode = recv(sock, msg2client, sizeof(msg2client), 0);
-                if (retcode <= 0 )
-                {
-                    printf("Connection error, try again\n");
-                    //Break from the while loop
-                    break;
-                }
-                msg2client[retcode] = '\0';
-                printf("Client: Message received from server: '\%s\'\n", msg2client);
-            }
-
-        */
-
-        /* **************************** */
-
-
-
-        /* Upload a file to the server */
-        /*
-        FILE *fp = fopen(fileName, "rb");           //read the file into binary format
-        if(fp == NULL)
-        {
-            printf("File open error");
-            exit(EXIT_FAILURE);
-        }
-
-        /* Receive data in chunks of BUFFER_SIZE bytes
-        int rcvdBtyes = 0;
-        while(retcode = fread(BUFFER_SIZE, 1, sizeof(BUFFER_SIZE), fp)> 0 )
-        {
-            send(sfd, sendbuffer, b, 0);
-        }
-        */
     }
     close(sock);	//Close the connection
     return 0;
@@ -230,7 +227,7 @@ void direction()
 {
     printf("\n");
     printf("\t*****************************************************\n");
-    printf("\t*          Simple FTP Server Implementation         *\n");
+    printf("\t*              FTP Server Implementation            *\n");
     printf("\t*                                                   *\n");
     printf("\t* AVAILABLE COMMANDS:                               *\n");
     printf("\t*                                                   *\n");
@@ -284,7 +281,9 @@ char *getfileIndex(int index)
 		for(i = 0; i < n; i++)
 		{
 			if (index + 1 != i);
+			{
 				free(namelist[i]);
+			}
 		}
 		return namelist[index + 1]->d_name;
 	}
