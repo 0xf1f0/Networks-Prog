@@ -15,6 +15,7 @@
 //Function prototypes
 void listFiles();
 char *getfileIndex(int index);
+void lsServer();
 
 int main(void)
 {
@@ -26,16 +27,11 @@ int main(void)
 	printf("\nList Files ++++++++++++++++\n");
 	listFiles();
 
-	strcpy(filename, getfileIndex(76));
+	lsServer();
+
+	strcpy(filename, getfileIndex(20));
 	printf("\\nGet file index ++++++++++++++++\n");
 	printf("%s\n", filename);
-
-    FILE *fp = fopen(filename, "rb");
-    if(fp == NULL)
-    {
-        perror("File");
-        return 2;
-    }
 	return 0;
 }
 
@@ -63,12 +59,13 @@ void listFiles()
 	printf("\nTotal number of files: %d\n", count - 1);
 }
 
-char *getfileIndex(int index)
+char *getfileIndex( int index)
 {
 	struct dirent **namelist;
 	int i;
 	int n;
 	int count = 1;
+    FILE *dest;
 
 	n = scandir(".", &namelist, 0, alphasort);
 	if(n < 0)
@@ -80,7 +77,42 @@ char *getfileIndex(int index)
 			if (index + 1 != i);
 				free(namelist[i]);
 		}
+		/*Create a file called lsServer.txt and write the files and index to it*/
 		return namelist[index + 1]->d_name;
 	}
 	free(namelist);
 }
+
+void lsServer()
+{
+    struct dirent **namelist;
+	int i;
+	int n;
+	int count = 1;
+	FILE *dest;
+	n = scandir(".", &namelist, 0, alphasort);
+	if(n < 0)
+		perror("Error listing files");
+	else
+	{
+        dest = fopen("lsServer.txt", "wb+");
+        if(dest == NULL)
+            printf("Error creating file\n");
+		for(i = 0; i < n; i++)
+		{
+			if (!strcmp(namelist[i]->d_name, ".") || !strcmp(namelist[i]->d_name, ".."))
+				continue;
+			//printf("\r%d.\t%s\n", count, namelist[i]->d_name);
+            fprintf(dest, "\r%d.\t%s\n", count, namelist[i]->d_name);
+			count++;
+			free(namelist[i]);
+		}
+		/*Create a file called lsServer.txt and write the files and index to it*/
+    }
+	free(namelist);
+}
+
+/*
+
+
+*/

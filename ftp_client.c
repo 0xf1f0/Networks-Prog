@@ -90,13 +90,20 @@ int main(int argc, char *argv[])
 	direction();
     while(1)    //Keep command line interface in a continuous loop
     {
-        char input[BUFFER_SIZE];
+        char input[BUFFER_SIZE]; //user input from command line
+        char copy[BUFFER_SIZE]; //copy of user input for comparison
         char *token1;   //command
         char *token2;   //argument
         char fileName[BUFFER_SIZE];
         char *strptr;
         char fileBuffer[BUFFER_SIZE];
         long int fileNum;
+        bool fileFound;
+        int inFile;     //file descriptor for incoming file
+        int outFile;    //file descriptor outoing file
+        char *msg2server;
+        char serverAck[MAX_LEN];
+
         ssize_t byteRcv = 0;    //byte read from local directory
         ssize_t byteSent = 0;   //byte sent to the socket
         ssize_t byteRead = 0;    //byte Read from the socket
@@ -105,12 +112,15 @@ int main(int argc, char *argv[])
         printf("ftp> ");    //Keep command line interface in a loop
         fgets(input, BUFFER_SIZE, stdin );
 
+        /*Save a copy user input for later*/
+        strcpy(copy, input);
         /*Process the user input and parse it into tokens */
         token1 = strtok(input, DELIMITER);
         token2 = strtok(NULL, DELIMITER);
 
         /* No input from user */
-
+        /*Send the command and filename to server and wait for an acknowledgment*/
+        /*Convert token2 to a number and convert to an integer */
         if(token1 == NULL)
         {
             continue;
@@ -127,26 +137,81 @@ int main(int argc, char *argv[])
         /* List Current files on server */
         else if(strcmp(token1, "ls") == 0 && strcmp(token2, "server") == 0)
         {
-            printf("ls server\n");
+            printf("This is the msg2server: %s\n", copy);
+            //msg2server: okay
+            if ((send(sock, copy, strlen(copy), 0)) == -1)
+            {
+                fprintf(stderr, "File request failed\n");
+                break;
+                //Do something else or try again
+            }
+            else
+            {
+                printf("Waiting for acknowledgment from ftp server ...\n");
+                retcode = recv(sock, serverAck, sizeof(serverAck), 0);
+                if (retcode <= 0 )
+                {
+                    printf("Connection error, try again\n");
+                    //Break from the while loop
+                    break;
+                }
+                serverAck[retcode] = '\0';
+                printf("Server Ack: '\%s\'\n", serverAck);
+                //Concatenate the ack with ".txt"
+                strcpy(fileName, serverAck);
+                strcat(fileName, ".txt");
+                //Download lsServer.txt */
+                if(retcode > 0)
+                {
+                    /* Attempt to save received file on local directory using mode 0644 /rw-r--r--*/
+                    inFile = open(serverAck, O_WRONLY|O_CREAT, 0664);
+                    if(inFile < 0)
+                    {
+                        printf("Error creating file \"%s\"\n", fileName);
+                    }
+                    else
+                    {
+                        while((byteRcv = recv(sock, fileBuffer, BUFFER_SIZE, 0)) > 0)
+                        {
+                            fileSz += byteRcv;
+                            if(write(inFile, fileBuffer, byteRcv) < 0)
+                            {
+                                printf("Error writing \"%s\"\n", fileName);
+                            }
+                        }
+                        close(inFile); //close the file
+                    }
+                    printf("File \"%s\" saved, %d bytes received\n", fileName, fileSz);
+
+                    FILE *fp;
+                    int read;
+                    fp = fopen("fileName","r");
+                    while(1)
+                    {
+                        read = fgetc(fp);
+                        if( feof(fp) )
+                        {
+                            break ;
+                        }
+                        printf("%c", read);
+                   }
+                    fclose(fp);//close file descriptor
+                }
+            }
         }
         /* **************************** */
 
         /* Upload a file to the server */
         else if((strcmp(token1, "u")== 0))
         {
-            /*Send the command and filename to server and wait for an acknowledgment*/
-            /*Convert token2 to a number and convert to an integer */
             fileNum = strtol (token2, &strptr, 10);      //strip the file number from token2 and store in base10
             strcpy(fileName, getfileIndex(fileNum));
             //Append the filename to token1 separated by a space ' '
-            char *msg2server;
-            char serverAck[MAX_LEN];
             //memset(msg2server, '\0', sizeof(msg2server));   //clear the memory location
             msg2server = malloc(strlen(token1) + strlen(" ") + strlen(fileName) + 1); //+1 for the zero-terminator
             strcpy(msg2server, token1);
             strcat(msg2server, " ");
             strcat(msg2server, fileName);
-
             printf("This is the msg2server: %s\n", msg2server);
             //msg2server: okay
             if ((send(sock, msg2server, strlen(msg2server), 0)) == -1)
@@ -174,8 +239,6 @@ int main(int argc, char *argv[])
                     //Send file to server
                     printf("Searching for file \"%s\" ...\n", fileName);
                     int outFile = open(fileName, O_RDONLY);   //file descriptor
-                    int sentCount;
-                    bool fileFound;
 
                     if(outFile < 0)
                     {
@@ -195,7 +258,6 @@ int main(int argc, char *argv[])
                         /* Read file in chunks of MAX_LEN =256 */
                         while((byteRead = read(outFile, fileBuffer, MAX_LEN)) > 0)
                         {
-
                             if(byteSent = send(sock, fileBuffer, byteRead, 0) < 0)
                             {
                                 fprintf(stderr, "ERROR: Failed to send file %s\n", fileName);
@@ -213,16 +275,53 @@ int main(int argc, char *argv[])
         /* Download a file from the server */
         else if((strcmp(token1, "d")== 0))
         {
-            while(1)
+            fileNum = strtol (token2, &strptr, 10);
+            msg2server = malloc(strlen(token1) + strlen(" ") + strlen(token2) + 1); //+1 for the zero-terminator
+            strcpy(msg2server, token1);
+            strcat(msg2server, " ");
+            strcat(msg2server, token2);
+            printf("This is the msg2server: %s\n", msg2server);
+            //msg2server: okay
+            if ((send(sock, msg2server, strlen(msg2server), 0)) == -1)
             {
-                /*Convert token2 to a number and convert to an integer */
-                fileNum = strtol (token2, &strptr, 10);      //strip the file number from token2 and store in base10
-                if(!isdigit(fileNum))
+                fprintf(stderr, "File request failed\n");
+                break;
+                //Do something else or try again
+            }
+            else
+            {
+                printf("Waiting for acknowledgment from ftp server ...\n");
+                retcode = recv(sock, serverAck, sizeof(serverAck), 0);
+                if (retcode <= 0 )
                 {
-                    printf("Invalid file number\n");
+                    printf("Connection error, try again\n");
+                    //Break from the while loop
                     break;
                 }
-                //Request file from server
+                serverAck[retcode] = '\0';
+                printf("Server Ack: '\%s\'\n", serverAck);
+                /* Wait for message acknowledgment from server then send the files*/
+                if(retcode > 0)
+                {
+                    /* Attempt to save received file on local directory using mode 0644 /rw-r--r--*/
+                    inFile = open(token2, O_WRONLY|O_CREAT, 0664);
+                    if(inFile < 0)
+                    {
+                        printf("Error creating file \"%s\"\n", token2);
+                    }
+                    else
+                    {
+                        while((byteRcv = recv(sock, fileBuffer, BUFFER_SIZE, 0)) > 0)
+                        {
+                            fileSz += byteRcv;
+                            if(write(inFile, fileBuffer, byteRcv) < 0)
+                            {
+                                printf("Error writing \"%s\"\n", token2);
+                            }
+                        }
+                    }
+                    printf("File \"%s\" saved, %d bytes received\n", token2, fileSz);
+                }
             }
         }
         /* **************************** */
@@ -231,7 +330,7 @@ int main(int argc, char *argv[])
         else if((strcmp(token1, "bye") == 0) || strcmp(token1, "exit") == 0)
         {
             close(sock);
-            exit(EXIT_SUCCESS);
+            break;
         }
         /* **************************** */
 
