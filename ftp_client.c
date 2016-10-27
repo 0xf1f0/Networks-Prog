@@ -18,19 +18,13 @@
 #define DELIMITER " \t\r\n\v\f"
 
 /*Pre-defined opcodes*/
-#define COMMAND_OKAY 200
-#define COMMAND_BAD 500
-#define LS_SERVER 5
-#define LS_CLIENT 4
-#define FILE_UPLOAD 3
-#define FILE_DOWNLOAD 2
-#define CLIENT_EXIT 1
 #define USAGE "Usage: command argument\n"
 
 //Function prototypes
 void direction(void);
 void listFiles(void);
 char *getfileIndex(int);
+static void printlsServer(const char *);
 
 int main(int argc, char *argv[])
 {
@@ -137,16 +131,19 @@ int main(int argc, char *argv[])
         /* List Current files on server */
         else if(strcmp(token1, "ls") == 0 && strcmp(token2, "server") == 0)
         {
-            printf("This is the msg2server: %s\n", copy);
-            //msg2server: okay
-            if ((send(sock, copy, strlen(copy), 0)) == -1)
+            msg2server = malloc(strlen(token1) + strlen(" ") + strlen(token2) + 1); //+1 for the zero-terminator
+            strcpy(msg2server, token1);
+            strcat(msg2server, " ");
+            strcat(msg2server, token2);
+            printf("This is the msg2server: %s\n", msg2server);
+
+            if ((send(sock, msg2server, strlen(msg2server), 0)) == -1)
             {
                 fprintf(stderr, "File request failed\n");
-                break;
                 //Do something else or try again
             }
-            else
-            {
+            //else
+            //{
                 printf("Waiting for acknowledgment from ftp server ...\n");
                 retcode = recv(sock, serverAck, sizeof(serverAck), 0);
                 if (retcode <= 0 )
@@ -158,46 +155,28 @@ int main(int argc, char *argv[])
                 serverAck[retcode] = '\0';
                 printf("Server Ack: '\%s\'\n", serverAck);
                 //Concatenate the ack with ".txt"
-                strcpy(fileName, serverAck);
-                strcat(fileName, ".txt");
-                //Download lsServer.txt */
                 if(retcode > 0)
                 {
                     /* Attempt to save received file on local directory using mode 0644 /rw-r--r--*/
-                    inFile = open(serverAck, O_WRONLY|O_CREAT, 0664);
+                    inFile = open(serverAck, O_WRONLY|O_CREAT, 0644); //read write only mode
                     if(inFile < 0)
                     {
                         printf("Error creating file \"%s\"\n", fileName);
                     }
-                    else
+                    if((byteRcv = recv(sock, fileBuffer, BUFFER_SIZE, 0)) > 0)
                     {
-                        while((byteRcv = recv(sock, fileBuffer, BUFFER_SIZE, 0)) > 0)
+                        fileSz += byteRcv;
+                        if(write(inFile, fileBuffer, byteRcv) < 0)
                         {
-                            fileSz += byteRcv;
-                            if(write(inFile, fileBuffer, byteRcv) < 0)
-                            {
-                                printf("Error writing \"%s\"\n", fileName);
-                            }
+                            printf("Error writing \"%s\"\n", fileName);
                         }
-                        close(inFile); //close the file
+                        printlsServer(fileName);
                     }
-                    printf("File \"%s\" saved, %d bytes received\n", fileName, fileSz);
-
-                    FILE *fp;
-                    int read;
-                    fp = fopen("fileName","r");
-                    while(1)
-                    {
-                        read = fgetc(fp);
-                        if( feof(fp) )
-                        {
-                            break ;
-                        }
-                        printf("%c", read);
-                   }
-                    fclose(fp);//close file descriptor
+                    close(inFile); //close the file
+                    //print ls server to screen
+                    //}
                 }
-            }
+            //}
         }
         /* **************************** */
 
@@ -247,16 +226,10 @@ int main(int argc, char *argv[])
                     }
                     else
                     {
-                        /*
-                        ssize_t byteRcv = 0;    //byte read from local directory
-                        ssize_t byteSent = 0    //byte sent to the socket
-                        ssize_t byteRead = 0    //byte Read from the socket
-                        ssize_t fileSz = 0;     //Actual file size in byte
-                        */
                         fileFound = 0;
                         printf("File \"%s\" found\n", fileName);
                         /* Read file in chunks of MAX_LEN =256 */
-                        while((byteRead = read(outFile, fileBuffer, MAX_LEN)) > 0)
+                        if((byteRead = read(outFile, fileBuffer, MAX_LEN)) > 0)
                         {
                             if(byteSent = send(sock, fileBuffer, byteRead, 0) < 0)
                             {
@@ -304,14 +277,14 @@ int main(int argc, char *argv[])
                 if(retcode > 0)
                 {
                     /* Attempt to save received file on local directory using mode 0644 /rw-r--r--*/
-                    inFile = open(token2, O_WRONLY|O_CREAT, 0664);
+                    inFile = open(token2, O_WRONLY|O_CREAT, 0644);
                     if(inFile < 0)
                     {
                         printf("Error creating file \"%s\"\n", token2);
                     }
                     else
                     {
-                        while((byteRcv = recv(sock, fileBuffer, BUFFER_SIZE, 0)) > 0)
+                        if((byteRcv = recv(sock, fileBuffer, BUFFER_SIZE, 0)) > 0)
                         {
                             fileSz += byteRcv;
                             if(write(inFile, fileBuffer, byteRcv) < 0)
@@ -320,7 +293,7 @@ int main(int argc, char *argv[])
                             }
                         }
                     }
-                    printf("File \"%s\" saved, %d bytes received\n", token2, fileSz);
+                    printf("File \"%s\" downloaded successfully, %d bytes received\n", token2, fileSz);
                 }
             }
         }
@@ -403,15 +376,27 @@ char *getfileIndex(int index)
 	{
 		for(i = 0; i < n; i++)
 		{
-			if (index + 1 != i);
+			if (index + 1 != i); //segfault when index + 1 ! = 1
 			{
 				free(namelist[i]);
 			}
 		}
 		return namelist[index + 1]->d_name;
 	}
-	free(namelist);
+	free(namelist); //free the memory
 }
 
+static void printlsServer(const char *file)
+{
+    FILE *fd = fopen(file, "r");      //open the specified file
+    if (fd != NULL)
+    {
+        int c;
 
-
+        while ((c = fgetc(fd)) != EOF)    //read character from file until EOF
+        {
+            putchar(c);                   // output character
+        }
+        fclose(fd);
+    }
+}

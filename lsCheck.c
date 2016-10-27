@@ -16,6 +16,7 @@
 void listFiles();
 char *getfileIndex(int index);
 void lsServer();
+static void displayFile(const char *);
 
 int main(void)
 {
@@ -26,12 +27,14 @@ int main(void)
 
 	printf("\nList Files ++++++++++++++++\n");
 	listFiles();
-
-	lsServer();
-
-	strcpy(filename, getfileIndex(20));
+	printf("\nDisplay Files ++++++++++++++++\n");
+	displayFile("lsServer.txt");
+	/*
+	strcpy(filename, getfileIndex(5));
 	printf("\\nGet file index ++++++++++++++++\n");
 	printf("%s\n", filename);
+	*/
+
 	return 0;
 }
 
@@ -110,6 +113,22 @@ void lsServer()
 		/*Create a file called lsServer.txt and write the files and index to it*/
     }
 	free(namelist);
+}
+
+
+static void displayFile(const char *fileName)
+{
+    FILE *fd = fopen(fileName, "r");      //open the specified file
+    if (fd != NULL)
+    {
+        int c;
+
+        while ((c = fgetc(fd)) != EOF)    //read character from file until EOF
+        {
+            putchar(c);                   // output character
+        }
+        fclose(fd);
+    }
 }
 
 /*

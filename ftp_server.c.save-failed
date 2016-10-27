@@ -22,7 +22,7 @@ const int NUM_WC = 5;
 
 // Function prototype
 char *getfileIndex(int index);
-void lsServer(char*);
+void lsServer();
 
 int main(int argc , char *argv[])
 {
@@ -221,16 +221,9 @@ int main(int argc , char *argv[])
                     else if(strcmp(cmd, "ls") == 0 && strcmp(arg, "server") == 0) //Client want to download a file
                     {
                         //printf("The file is %s", ls_server); //verify
-
-                        char *fileName;
-                        cmd = strtok(msgBuffer, DELIMITER);
-                        arg = strtok(NULL, DELIMITER);
-                        fileName = (char *) malloc(MAX_LEN);
-                        strcpy(fileName, cmd);
-                        strcat(fileName, arg);
-                        strcat(fileName, ".txt");
-
-                        lsServer(fileName); //create  "lsServer.txt" and Save the file listings to lsServer.txt
+                        lsServer(); //create  "lsServer.txt" and Save the file listings to lsServer.txt
+                        char fileName[MAX_LEN];
+                        strcpy(fileName, getfileIndex(fileNum));
                         printf("command: %s\nFile name: %s\n", cmd, fileName);
                         outFile = open(fileName, O_RDONLY);   //Read only mode
                         if(outFile < 0)
@@ -288,19 +281,18 @@ char *getfileIndex(int index)
 }
 
 /*Save the list of files in local directory to file*/
-void lsServer( char *fileName)
+void lsServer(const FILE *dest , char *fileName)
 {
     struct dirent **namelist;
 	int i;
 	int n;
 	int count = 1;
-	FILE *dest;
 	fileName = (char *) malloc(MAX_LEN);
 	n = scandir(".", &namelist, 0, alphasort);
 	if(n < 0)
 		perror("Error listing files");
 	    /*Create a file called lsServer.txt and write the files and index to it*/
-    dest = fopen(fileName, "ab+");
+    dest = fopen("lsserver.txt", "ab+");
     if(dest == NULL)
         printf("Error creating file\n");
     for(i = 0; i < n; i++)
